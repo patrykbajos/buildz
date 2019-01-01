@@ -1,60 +1,63 @@
-from buildz.toolchain.avrgcc import AvrGccToolchain
-from buildz.toolchain.gcc import GccToolchain
-
 import json
-import subprocess
 import re
-from pathlib import Path
-from schema import Schema, SchemaError, Optional, And, Or, Use
+import subprocess
+import types
+from copy import deepcopy
 from os import getcwd
+from pathlib import Path
+
+from schema import And, Optional, Or, Schema, SchemaError, Use, Const
 
 _buildz_mod_schema = Schema({
-    "files": [str],
-    Optional("env"): {
-        str: {}
+    'files': [str],
+    Optional('env'): {
+        Optional(str): object
     }
 })
 
 _buildz_schema = Schema({
-    "build": {
-        "build_type": ["release", "debug"],
-        "targets": Or("all", [str]),
-        "includes": [str]
+    'build': {
+        'type': Or('release', 'debug'),
+        'targets': Or('all', [str]),
     },
-    "modules": [str],
-    "toolchains": {
+    'modules': [str],
+    'toolchains': {
         str: {
-            "type": str,
-            "output_pattern": str, 
-            Optional('env'): {},
-            Optional('conf'): {}
+            'type': str,
+            'output_dir': str,
+            'output_pattern': str, 
+            Optional('env'): {
+                Optional(str): object
+            },
+            Optional('conf'): {
+                Optional(str): object
+            }
         }
     },
-    "targets": {
+    'targets': {
         str: {
-            "modules": Or(str, [str]),
-            "toolchain": str,
-            Optional("env"): {}
+            'modules': Or('all', [str]),
+            'toolchain': str,
+            Optional('env'): {
+                Optional(str): object
+            }
         }
     }
 })
 
+def get_abs_mod_path(mod_name):
+    mod_path = Path(mod_name + '/module.json')
+
+    if not mod_path.is_file():
+        raise FileNotFoundError('get_abs_mod_path(): Could not find module {}.'.format(mod_name))
+
+    return mod_path.resolve()
+
 def get_buildz_mod(mod_name):
-    cwd = Path(getcwd())
-
-    path_inglobal = Path('modules/{}.json'.format(mod_name))
-    path_inmoddir = Path('{}/module.json'.format(mod_name))
-    conf_path = Path()
-
-    if path_inglobal.is_file():
-        conf_path = path_inglobal
-    elif path_inmoddir.is_file():
-        conf_path = path_inmoddir
-    else:
-        raise FileNotFoundError('get_buildz_mod(): Could not find module {}.'.format(mod_name))
+    mod_path = get_abs_mod_path(mod_name)
 
     try:
-        data = json.load(conf_path.open())
+        data = json.load(mod_path.open())
         return _buildz_mod_schema.validate(data)
     except:
         raise ValueError('get_buildz_mod(): Could not serialize or validate module {}.'.format(mod_name))
@@ -63,13 +66,13 @@ def get_buildz_conf():
     buildz_path = Path('buildz.json')
 
     if not buildz_path.is_file():
-        raise FileNotFoundError("get_buildz(): Not found buildz.json config.")
+        raise FileNotFoundError('get_buildz(): Not found buildz.json config.')
 
     try:
         data = json.load(buildz_path.open())
         return _buildz_schema.validate(data)
-    except:
-        raise ValueError('get_buildz(): Could not serialize or validate buildz config.')
+    except Exception as e:
+        raise ValueError('get_buildz(): Could not serialize or validate buildz config.', e)
 
 def get_dicts_with_value(dict_, label, value):
     return [x for x in dict_ if label in x and x[label] == value]
@@ -100,7 +103,7 @@ def merge(a, b, str_separator=None):
     if isinstance(a, (tuple, list)):
         return a + b
     if isinstance(a, dict):
-        out = a.copy()
+        out = deepcopy(a)
 
         for key in b.keys():
             if key in a:
@@ -116,6 +119,17 @@ def merge(a, b, str_separator=None):
         return b
     return b
 
+def merge_envs(tch_env, mod_env, trg_env, env_sch_val):
+    env_sch = Schema(env_sch_val)
+
+    try:
+        temp_env = merge(tch_env, mod_env)
+        temp_env = merge(temp_env, trg_env)
+    except:
+        temp_env = tch_env
+
+    return env_sch.validate(temp_env)
+
 def get_cmd_matches(args, pattern, stdin=None):
     proc = subprocess.run(args, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.STDOUT , text=True)
     
@@ -124,15 +138,53 @@ def get_cmd_matches(args, pattern, stdin=None):
 
     return re.findall(pattern, proc.stdout, re.M)
 
-def factory_toolchain(tch_name, tch_dict):
-    tch = tch_dict.get(tch_name)
+def find_re_it_in_list(pattern, input, start=0, stop=-1, flags=0):
+    length = len(input)
+    
+    if length == 0:
+        return None
 
-    if tch is None:
-        raise KeyError('Missing toolchain {} in toolchains.'.format(tch_name))
+    end_it = max(0, length - 1)
 
-    if tch.type == 'GccToolchain':
-        return GccToolchain(tch.conf, tch.env)
-    if tch.type == 'AvrGccToolchain':
-        return AvrGccToolchain(tch.conf, tch.env)
-        
-    raise ValueError('Unknown toolchain type {} in toolchain {}.'.format(tch.type, tch_name))
+    if start >= end_it:
+        return None
+
+    if stop<0:
+        stop = length
+
+    if stop <= start:
+        return None
+
+    for it in range(max(0, start), min(stop, length)):
+        elem = input[it]
+        match = re.match(pattern, elem, flags)
+        if match:
+            return it
+
+def route_args(next_args, route):
+        if type(route) is types.FunctionType:
+            route(*next_args)
+            return
+        if type(route) is types.MethodType:
+            route(*next_args)
+            return
+
+        if len(next_args) < 1:
+            return
+
+        way_name = next_args[0]
+        way = route.get(way_name)
+
+        if way is None:
+            return
+
+        next_args = next_args[1:]
+
+        if type(way) is types.FunctionType:
+            way(*next_args)
+            return
+        if type(way) is types.MethodType:
+            way(*next_args)
+            return
+        if type(way) is dict:
+            route_args(next_args, way)

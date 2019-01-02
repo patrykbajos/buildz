@@ -89,16 +89,14 @@ class GccToolchain(GenericToolchain):
 
         mod_envs = mod.get('env', {})
         mod_env = mod_envs.get(tch_name, {})
-        env = merge_envs(self.env, mod_env, trg_env, self._env_sch_val)  
 
+        env = merge_envs(self.env, mod_env, trg_env, self._env_sch_val)  
         env_defs = env.get('defines', [])
         env_incls = env.get('includes', [])
 
         compile_flags = env.get('compile_flags', [])
         link_flags = env.get('link_flags', [])
         incls = ['-I'+x for x in env_incls]
-
-        gcc_pathstr = self.conf['gcc_path']
 
         out_name_params = {
             'build_type': build_type,
@@ -108,30 +106,30 @@ class GccToolchain(GenericToolchain):
             'env': deepcopy(env)
         }
 
-        out_dir = Path(tch['output_dir'].format(**out_name_params))
+        out_absdir = Path(tch['output_dir'].format(**out_name_params)).resolve()
         out_name = tch['output_pattern'].format(**out_name_params)
         defs = ['-D'+d.format(**out_name_params) for d in env_defs]
 
-        mod_dir = get_abs_mod_path(mod_name).parent
-
-        os.makedirs(str(out_dir), exist_ok=True)
-
         # compiling
-        objs = []
+        obj_abspaths = []
+        mod_absdir = get_abs_mod_path(mod_name).parent
+        os.makedirs(str(out_absdir), exist_ok=True)
+        gcc_pathstr = self.conf['gcc_path']
+
         for f_pathstr in mod['files']:
             with Path(f_pathstr) as f_path:
                 if f_path.is_absolute():
                     continue
-            
 
-                obj_path = out_dir / f_path.with_suffix('.o')
-                objs.append(str(obj_path))
+                obj_abspath = out_absdir / 'obj' / f_path.with_suffix('.o')
+                obj_abspaths.append(obj_abspath)
+                in_abspath = mod_absdir / f_pathstr
 
-                comp_args = [ gcc_pathstr, '-c', '-o', str(obj_path)]
+                comp_args = [ gcc_pathstr, '-c', '-o', str(obj_abspath)]
                 comp_args.extend(compile_flags)
                 comp_args.extend(defs)
                 comp_args.extend(incls)
-                comp_args.append(str(mod_dir / f_pathstr))
+                comp_args.append(str(in_abspath))
 
                 comp_proc = subprocess.run(comp_args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
@@ -146,12 +144,15 @@ class GccToolchain(GenericToolchain):
         else:
             bin_ext = ''
         
-        bin_path = out_dir / str(out_name+bin_ext)
+        for obj_abspath in obj_abspaths:
+            os.makedirs(str(obj_abspath.parent), exist_ok=True)
+
+        bin_abspath = out_absdir / str(out_name+bin_ext)
 
         link_args = [gcc_pathstr]
         link_args.extend(link_flags)
-        link_args.extend(['-o', str(bin_path)])
-        link_args.extend(objs)
+        link_args.extend(['-o', str(bin_abspath)])
+        link_args.extend(obj_abspaths)
         link_proc = subprocess.run(link_args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
         if link_proc.returncode == 0:

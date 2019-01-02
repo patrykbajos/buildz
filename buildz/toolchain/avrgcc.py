@@ -1,3 +1,4 @@
+import os
 import subprocess
 import platform
 from copy import deepcopy
@@ -7,7 +8,7 @@ from pyavrutils import AvrGcc
 from schema import Optional, Schema, Or
 
 from buildz.toolchain.gcc import GccToolchain
-from buildz.utils import get_buildz_mod, merge_envs
+from buildz.utils import get_buildz_mod, merge_envs, get_abs_mod_path
 
 
 class AvrGccToolchain(GccToolchain):
@@ -62,9 +63,6 @@ class AvrGccToolchain(GccToolchain):
             cc.optimization = env_opt
         cc.options_extra.extend(env_cflags)
         cc.mcu = env_mcu
-        
-        tch_out_dir = Path(tch['output_dir'])
-        tch_out_pattern = tch['output_pattern']
 
         out_name_params = {
             'build_type': build_type,
@@ -73,12 +71,26 @@ class AvrGccToolchain(GccToolchain):
             'target_toolchain': tch_name,
             'env': deepcopy(env)
         }
+
+        mod_absdir = get_abs_mod_path(mod_name).parent
+        out_absdir = Path(tch['output_dir'].format(**out_name_params)).resolve()
+        out_name_pattern = tch['output_pattern']
         cc.defines = [d.format(**out_name_params) for d in env_defs]
+
+        os.makedirs(str(out_absdir), exist_ok=True)
 
         for f_cpu in env_fcpu:
                 out_name_params['env']['fcpu'] = f_cpu
-                out_name = tch_out_pattern.format(**out_name_params)
+                out_name = out_name_pattern.format(**out_name_params)
 
-                cc.output = str(tch_out_dir / out_name)
+                src_abspath_strs = []
+                for f_pathstr in mod['files']:
+                    f_path = Path(f_pathstr)
+                    if f_path.is_absolute():
+                        continue
+
+                    src_abspath_strs.append(str(mod_absdir / f_pathstr))
+
+                cc.output = str(out_absdir / out_name)
                 cc.f_cpu = f_cpu
-                cc.build(mod['files'])
+                cc.build(src_abspath_strs)

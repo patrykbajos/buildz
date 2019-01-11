@@ -77,7 +77,7 @@ def get_buildz_conf():
 def get_dicts_with_value(dict_, label, value):
     return [x for x in dict_ if label in x and x[label] == value]
 
-def nodupl_append_dict_to_list(lst, key, value):
+def append_unique_dict_to_list(lst, key, value):
     key_val = value[key]
 
     # find iterators of duplicates

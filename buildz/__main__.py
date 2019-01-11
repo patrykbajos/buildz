@@ -23,7 +23,7 @@ def main():
     front_args = args[1:]
 
     front = factory_frontend(front_name)
-    route_args(front_args, front._route)
+    route_args(front_args, front._route, front)
     return 0
 
 if __name__ == "__main__":

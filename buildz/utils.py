@@ -81,17 +81,15 @@ def nodupl_append_dict_to_list(lst, key, value):
     key_val = value[key]
 
     # find iterators of duplicates
-    dupl_i = []
-    for i in range(len(lst)):
-        elem = lst[i]
-        if key in elem:
-            if elem[key] == key_val:
-                dupl_i.append(i)
+    dupl_it = []
+    for it, elem in enumerate(lst):
+        if elem.get(key) == key_val:
+            dupl_it.append(it)
 
     # remove duplicates from end to begin
-    dupl_i.sort(reverse=True)
-    for i in dupl_i:
-        lst.remove(i)
+    dupl_it.sort(reverse=True)
+    for it in dupl_it:
+        del lst[it]
 
     lst.append(value)
     return

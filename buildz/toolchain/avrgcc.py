@@ -14,8 +14,8 @@ from buildz.utils import get_buildz_mod, merge_envs, get_abs_mod_path
 class AvrGccToolchain(GccToolchain):
     _env_sch_val = deepcopy(GccToolchain._env_sch_val)
     _env_sch_val.update({
-        "mcu": str,
-        "fcpu": [int],
+        Optional('mcu'): str,
+        Optional('fcpu'): [int],
         Optional('optimization'): Or(0, 1, 2, 3, 's')
     })
 
@@ -99,7 +99,7 @@ class AvrGccToolchain(GccToolchain):
     def gen_task_params(self, trg_name, trg):
         fcpus = trg['env'].get('fcpu', [])
 
-        return [(trg_name, fcpu) for fcpu in fcpus]
+        return [(trg_name, str(fcpu)) for fcpu in fcpus]
     
     def gen_config(self, trg_name, fcpu):
         return {}

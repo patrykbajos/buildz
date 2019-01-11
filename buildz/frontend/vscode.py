@@ -89,6 +89,21 @@ class VSCodeFrontend():
         self.__save_tasks_file()
         return
 
+    def clean_tasks(self):
+        tasks_list = self.__tasks_dict['tasks']
+
+        todelete_it = []
+
+        for task_it, task_dict in enumerate(tasks_list):
+            if task_dict['label'].startswith('BuildZ'):
+                todelete_it.append(task_it)
+
+        todelete_it.sort(reverse=True)
+        for it in todelete_it:
+            del tasks_list[it]
+
+        self.__save_tasks_file()
+
     def select_target(self, trg_name, *trg_args):
         cpp_prop = self.__prop_dict
         bz_conf = get_buildz_conf()
@@ -101,6 +116,9 @@ class VSCodeFrontend():
 
         tch_handler = factory_named_toolchain(tch_name, tchs)
 
+        # TODO WARNING 
+        env = {}
+
         defines = tch_handler.get_defines(env)
         includes = tch_handler.get_includes(env)
 
@@ -111,6 +129,9 @@ class VSCodeFrontend():
         return
 
     _route = {
+        'clean': {
+            'tasks': clean_tasks
+        },
         'update': {
             'tasks': update_tasks
         },

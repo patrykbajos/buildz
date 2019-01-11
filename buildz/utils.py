@@ -159,12 +159,15 @@ def find_re_it_in_list(pattern, input, start=0, stop=-1, flags=0):
         if match:
             return it
 
-def route_args(next_args, route):
+def route_args(next_args, route, class_instance=None):
         if type(route) is types.FunctionType:
-            route(*next_args)
+            if class_instance:
+                route(class_instance, *next_args)
+            else:
+                route(*next_args)
             return
         if type(route) is types.MethodType:
-            route(*next_args)
+            route(class_instance, *next_args)
             return
 
         if len(next_args) < 1:
@@ -179,10 +182,13 @@ def route_args(next_args, route):
         next_args = next_args[1:]
 
         if type(way) is types.FunctionType:
-            way(*next_args)
+            if class_instance:
+                way(class_instance, *next_args)
+            else:
+                way(*next_args)
             return
         if type(way) is types.MethodType:
             way(*next_args)
             return
         if type(way) is dict:
-            route_args(next_args, way)
+            route_args(next_args, way, class_instance)

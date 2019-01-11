@@ -65,15 +65,17 @@ class VSCodeFrontend():
         for trg_name, trg in trgs.items():
             tch_handle = factory_named_toolchain(trg['toolchain'], tchs)
             sel_trg_params = tch_handle.gen_task_params(trg_name, trg)
-            sel_params_str = ' '.join(sel_trg_params)
 
-            sel_task = {
-                'label': 'BuildZ Select Task ' + sel_params_str,
-                'type': 'shell',
-                'command': 'python -m buildz select ' + sel_params_str,
-                'problemMatcher': []
-            }
-            sel_tasks.append(sel_task)
+            for params_tuple in sel_trg_params:
+                sel_params_str = ' '.join(params_tuple)
+
+                sel_task = {
+                    'label': 'BuildZ Select Task ' + sel_params_str,
+                    'type': 'shell',
+                    'command': 'python -m buildz select ' + sel_params_str,
+                    'problemMatcher': []
+                }
+                sel_tasks.append(sel_task)
 
         tasks_list = self.__tasks_dict.get('tasks', [])
 

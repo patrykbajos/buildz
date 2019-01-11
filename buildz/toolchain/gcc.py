@@ -116,6 +116,8 @@ class GccToolchain(GenericToolchain):
         os.makedirs(str(out_absdir), exist_ok=True)
         gcc_pathstr = self.conf['gcc_path']
 
+        # TODO create dirs before compilation
+
         for f_pathstr in mod['files']:
             with Path(f_pathstr) as f_path:
                 if f_path.is_absolute():
@@ -161,3 +163,12 @@ class GccToolchain(GenericToolchain):
             print('GccToolchain.build_mod(): GCC returned with errors for file {}:\n'.format(f_pathstr), link_proc.stdout, '\n')
             
         return (link_proc.returncode == 0)
+
+    # VSCode support
+    def gen_tasks(self, trg_name, trg):
+        return [
+            (trg_name)
+        ]
+    
+    def gen_config(self, trg_name):
+        return {}

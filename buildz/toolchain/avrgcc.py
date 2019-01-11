@@ -94,3 +94,12 @@ class AvrGccToolchain(GccToolchain):
                 cc.output = str(out_absdir / out_name)
                 cc.f_cpu = f_cpu
                 cc.build(src_abspath_strs)
+
+    # VSCode support
+    def gen_task_params(self, trg_name, trg):
+        fcpus = trg['env'].get('fcpu', [])
+
+        return [(trg_name, fcpu) for fcpu in fcpus]
+    
+    def gen_config(self, trg_name, fcpu):
+        return {}

@@ -3,74 +3,114 @@ import platform
 
 from buildz.toolchain.factory import factory_named_toolchain
 from buildz.utils import (get_buildz_conf, get_dicts_with_value,
-                          nodupl_append_dict_to_list)
+                          append_unique_dict_to_list)
 
 
 class VSCodeFrontend():
-    __vsc_sys_name_dict = {
+    __vsc_plat_dict = {
         'Linux': 'Linux',
         'Darwin': 'Mac',
         'Windows': 'Win32'
     }
 
-    tasks_path = '.vscode/tasks.json'
-    cpp_prop_path = '.vscode/c_cpp_properies.json'
+    __tasks_path = '.vscode/tasks.json'
+    __cpp_prop_path = '.vscode/c_cpp_properties.json'
 
     def __init__(self):
-        tasks_file = open(self.tasks_path, 'r')
-        cpp_prop_file = open(self.cpp_prop_path, 'r')
+        plat_sys = platform.system()
+        self.__vsc_sys_name = self.__vsc_plat_dict.get(plat_sys)
 
-        local_sys_name = platform.system()
-        if not local_sys_name in self.__vsc_sys_name_dict:
-            print('Unsupported platform system: {}'.format(local_sys_name))
-            exit
+        if not self.__vsc_sys_name:
+            raise OSError('Unsupported system platform: {}, supported: {}.'.format(plat_sys, list(self.__vsc_plat_dict)))
 
-        self.vsc_sys_name = self.__vsc_sys_name_dict[local_sys_name]
-        self.cpp_prop_conf_name = self.vsc_sys_name
-        self.tasks_json = json.load(tasks_file)
-        self.cpp_prop_json = json.load(cpp_prop_file)
+        tasks_file = open(self.__tasks_path, 'r')
+        prop_file = open(self.__cpp_prop_path, 'r')
+        self.__tasks_dict = json.load(tasks_file)
+        self.__prop_dict = json.load(prop_file)
         
         tasks_file.close()
-        cpp_prop_file.close()
+        prop_file.close()
         return
 
-    def save_tasks_file(self):
-        tasks_file = open(self.tasks_path, 'w')
-        json.dump(self.tasks_json, tasks_file, indent=4)
+    def __save_tasks_file(self):
+        tasks_file = open(self.__tasks_path, 'w')
+        json.dump(self.__tasks_dict, tasks_file, indent=4)
         tasks_file.close()
 
-    def gen_tasks(self):
+    def update_tasks(self):
         try:
-            build_conf = get_buildz_conf()
-        except Exception as exc:
-            print('VSCodeFrontend.update_tasks(): Error getting buildz config.\n', exc)
+            bz_conf = get_buildz_conf()
+        except Exception as e:
+            print('VSCodeFrontend.update_tasks(): Error getting buildz config.\n', e)
             return
 
-        targets = build_conf['targets']
-        toolchains = build_conf['toolchains']
+        trgs = bz_conf['targets']
+        tchs = bz_conf['toolchains']
 
-        for trg_name, target in targets.items():
-            tch_name = target['toolchain']
-            tch_handle = factory_named_toolchain(tch_name, toolchains)
+        build_task = {
+            'label': 'BuildZ Build',
+            'type': 'shell',
+            'command': 'python -m buildz build',
+            'problemMatcher': []
+        }
 
-            tasks = self.tasks_json['tasks']
+        upd_task = {
+            'label': 'BuildZ Update Tasks',
+            'type': 'shell',
+            'command': 'python -m buildz vscode update tasks',
+            'problemMatcher': []
+        }
 
-            #TODO update tasks
+        sel_tasks = []
+        for trg_name, trg in trgs.items():
+            tch_handle = factory_named_toolchain(trg['toolchain'], tchs)
+            sel_trg_params = tch_handle.gen_task_params(trg_name, trg)
+            sel_params_str = ' '.join(sel_trg_params)
 
-        self.save_tasks_file()
+            sel_task = {
+                'label': 'BuildZ Select Task ' + sel_params_str,
+                'type': 'shell',
+                'command': 'python -m buildz select ' + sel_params_str,
+                'problemMatcher': []
+            }
+            sel_tasks.append(sel_task)
+
+        tasks_list = self.__tasks_dict.get('tasks', [])
+
+        # TODO task list changing check
+
+        append_unique_dict_to_list(tasks_list, 'label', build_task)
+        append_unique_dict_to_list(tasks_list, 'label', upd_task)
+        for sel_task in sel_tasks:
+            append_unique_dict_to_list(tasks_list, 'label', sel_task)
+
+        self.__save_tasks_file()
         return
 
-    def select_target(self, trg_name):
-        conf_base = self.cpp_prop_json
+    def select_target(self, trg_name, *trg_args):
+        cpp_prop = self.__prop_dict
+        bz_conf = get_buildz_conf()
 
-        env = conf_base['env']
-        confs = conf_base['configurations']
+        confs = cpp_prop['configurations']
+
+        trg_conf = bz_conf['targets'][trg_name]
+        tch_name = trg_conf['toolchain']
+        tchs = bz_conf['toolchains']
+
+        tch_handler = factory_named_toolchain(tch_name, tchs)
+
+        defines = tch_handler.get_defines(env)
+        includes = tch_handler.get_includes(env)
+
+        
+        # TODO target selection
+
 
         return
 
     _route = {
         'update': {
-            'tasks': gen_tasks
+            'tasks': update_tasks
         },
         'select': {
             'target': select_target

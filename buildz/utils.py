@@ -108,6 +108,7 @@ def merge(a, b, str_separator=None):
                 out[key] = merge(a[key], b[key], str_separator=str_separator)
             else:
                 out[key] = b[key]
+        return out
     if isinstance(a, str):
         if str_separator:
             return str(a + str_separator + b)
@@ -127,6 +128,22 @@ def merge_envs(tch_env, mod_env, trg_env, env_sch_val):
         temp_env = tch_env
 
     return env_sch.validate(temp_env)
+
+def resolve_rel_paths_list(pthstr_list, parent_dirstr):
+    parent_dir = Path(parent_dirstr)
+    out_list = []
+
+    for pthstr in pthstr_list:
+        pth = Path(pthstr)
+        
+        if pth.is_absolute():
+            out_list.append(str(pth))
+
+        pth = parent_dir / pth
+        pth.resolve()
+        out_list.append(str(pth))
+
+    return out_list
 
 def get_cmd_matches(args, pattern, stdin=None):
     proc = subprocess.run(args, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.STDOUT , text=True)
@@ -167,7 +184,7 @@ def route_args(next_args, route, class_instance=None):
                 route(*next_args)
             return
         if type(route) is types.MethodType:
-            route(class_instance, *next_args)
+            route(*next_args)
             return
 
         if len(next_args) < 1:

@@ -3,76 +3,7 @@ import re
 import subprocess
 import types
 from copy import deepcopy
-from os import getcwd
 from pathlib import Path
-
-from schema import And, Optional, Or, Schema, SchemaError, Use, Const
-
-_buildz_mod_schema = Schema({
-    'files': [str],
-    Optional('env'): {
-        Optional(str): object
-    }
-})
-
-_buildz_schema = Schema({
-    'build': {
-        'type': Or('release', 'debug'),
-        'targets': Or('all', [str]),
-    },
-    'modules': [str],
-    'toolchains': {
-        str: {
-            'type': str,
-            'output_dir': str,
-            'output_pattern': str, 
-            Optional('env'): {
-                Optional(str): object
-            },
-            Optional('conf'): {
-                Optional(str): object
-            }
-        }
-    },
-    'targets': {
-        str: {
-            'modules': Or('all', [str]),
-            'toolchain': str,
-            Optional('env'): {
-                Optional(str): object
-            }
-        }
-    }
-})
-
-def get_abs_mod_path(mod_name):
-    mod_path = Path(mod_name + '/module.json')
-
-    if not mod_path.is_file():
-        raise FileNotFoundError('get_abs_mod_path(): Could not find module {}.'.format(mod_name))
-
-    return mod_path.resolve()
-
-def get_buildz_mod(mod_name):
-    mod_path = get_abs_mod_path(mod_name)
-
-    try:
-        data = json.load(mod_path.open())
-        return _buildz_mod_schema.validate(data)
-    except:
-        raise ValueError('get_buildz_mod(): Could not serialize or validate module {}.'.format(mod_name))
-
-def get_buildz_conf():
-    buildz_path = Path('buildz.json')
-
-    if not buildz_path.is_file():
-        raise FileNotFoundError('get_buildz(): Not found buildz.json config.')
-
-    try:
-        data = json.load(buildz_path.open())
-        return _buildz_schema.validate(data)
-    except Exception as e:
-        raise ValueError('get_buildz(): Could not serialize or validate buildz config.', e)
 
 def get_dicts_with_value(dict_, label, value):
     return [x for x in dict_ if label in x and x[label] == value]
@@ -118,16 +49,14 @@ def merge(a, b, str_separator=None):
         return b
     return b
 
-def merge_envs(tch_env, mod_env, trg_env, env_sch_val):
-    env_sch = Schema(env_sch_val)
-
+def merge_envs(tch_env, mod_env, trg_env, envsch):
     try:
         temp_env = merge(tch_env, mod_env)
         temp_env = merge(temp_env, trg_env)
     except:
         temp_env = tch_env
 
-    return env_sch.validate(temp_env)
+    return envsch.validate(temp_env)
 
 def resolve_rel_paths_list(pthstr_list, parent_dirstr):
     parent_dir = Path(parent_dirstr)

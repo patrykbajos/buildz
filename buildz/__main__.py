@@ -2,7 +2,7 @@ import sys
 
 from buildz.frontend.buildzself import BuildzSelfFrontend
 from buildz.frontend.vscode import VSCodeFrontend
-from buildz.toolchain.factory import factory_named_toolchain
+from buildz.toolchain.factory import factory_toolchain
 from buildz.utils import route_args
 
 def factory_frontend(name):

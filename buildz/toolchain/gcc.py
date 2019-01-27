@@ -9,7 +9,7 @@ from schema import Optional, Schema, SchemaError
 
 from buildz.toolchain.generic import GenericToolchain
 from buildz.utils import (find_re_it_in_list, get_buildz_mod, get_cmd_matches,
-                          merge, merge_envs, get_abs_mod_path)
+                          merge, merge_envs, get_abs_mod_path, resolve_rel_paths_list)
 
 
 class GccToolchain(GenericToolchain):
@@ -87,8 +87,17 @@ class GccToolchain(GenericToolchain):
             print("GccToolchain.build_mod(): Unexpeced error getting build module.")
             return
 
+        mod_absdir = get_abs_mod_path(mod_name).parent
         mod_envs = mod.get('env', {})
         mod_env = mod_envs.get(tch_name, {})
+
+        tch_incls_temp = self.env.get('includes', [])
+        trg_incls_temp = trg_env.get('includes', [])
+        mod_incls_temp = mod_env.get('includes', [])
+
+        self.env['includes'] = resolve_rel_paths_list(tch_incls_temp, os.getcwd())
+        trg_env['includes'] = resolve_rel_paths_list(trg_incls_temp, os.getcwd())
+        mod_env['includes'] = resolve_rel_paths_list(mod_incls_temp, mod_absdir)
 
         env = merge_envs(self.env, mod_env, trg_env, self._env_sch_val)  
         env_defs = env.get('defines', [])
@@ -115,8 +124,6 @@ class GccToolchain(GenericToolchain):
         mod_absdir = get_abs_mod_path(mod_name).parent
         os.makedirs(str(out_absdir), exist_ok=True)
         gcc_pathstr = self.conf['gcc_path']
-
-        # TODO create dirs before compilation
 
         for f_pathstr in mod['files']:
             with Path(f_pathstr) as f_path:

@@ -4,11 +4,11 @@ import platform
 from copy import deepcopy
 from pathlib import Path
 
-from pyavrutils import AvrGcc
+from pyavrutils import AvrGcc, AvrGccCompileError
 from schema import Optional, Schema, Or
 
 from buildz.toolchain.gcc import GccToolchain
-from buildz.utils import get_buildz_mod, merge_envs, get_abs_mod_path
+from buildz.utils import get_buildz_mod, merge_envs, get_abs_mod_path, resolve_rel_paths_list
 
 
 class AvrGccToolchain(GccToolchain):
@@ -37,14 +37,24 @@ class AvrGccToolchain(GccToolchain):
         try:
             mod = get_buildz_mod(mod_name)
         except FileNotFoundError:
-            print('GccToolchain.build_mod(): Not found module.')
+            print('AvrGccToolchain.build_mod(): Not found module {}.'.format(mod_name))
             return
         except:
-            print("GccToolchain.build_mod(): Unexpeced error getting build module.")
+            print("AvrGccToolchain.build_mod(): Unexpeced error getting build module {}.".format(mod_name))
             return
 
+        mod_absdir = get_abs_mod_path(mod_name).parent
         mod_envs = mod.get('env', {})
         mod_env = mod_envs.get(tch_name, {})
+
+        tch_incls_temp = self.env.get('includes', [])
+        trg_incls_temp = trg_env.get('includes', [])
+        mod_incls_temp = mod_env.get('includes', [])
+
+        self.env['includes'] = resolve_rel_paths_list(tch_incls_temp, os.getcwd())
+        trg_env['includes'] = resolve_rel_paths_list(trg_incls_temp, os.getcwd())
+        mod_env['includes'] = resolve_rel_paths_list(mod_incls_temp, mod_absdir)
+
         env = merge_envs(self.env, mod_env, trg_env, self._env_sch_val)  
 
         env_defs = env.get('defines', [])
@@ -54,9 +64,7 @@ class AvrGccToolchain(GccToolchain):
         env_cflags = env.get('compile_flags', [])
         env_opt = env.get('optimization')
 
-        gcc_pathstr = self.conf['gcc_path']
 
-        cc = AvrGcc()
         cc.cc = gcc_pathstr
         cc.includes = env_incls
         if env_opt:
@@ -72,12 +80,12 @@ class AvrGccToolchain(GccToolchain):
             'env': deepcopy(env)
         }
 
-        mod_absdir = get_abs_mod_path(mod_name).parent
         out_absdir = Path(tch['output_dir'].format(**out_name_params)).resolve()
         out_name_pattern = tch['output_pattern']
-        cc.defines = [d.format(**out_name_params) for d in env_defs]
-
         os.makedirs(str(out_absdir), exist_ok=True)
+        cc.defines = [d.format(**out_name_params) for d in env_defs]
+        gcc_pathstr = self.conf['gcc_path']
+
 
         for f_cpu in env_fcpu:
                 out_name_params['env']['fcpu'] = f_cpu
@@ -93,7 +101,11 @@ class AvrGccToolchain(GccToolchain):
 
                 cc.output = str(out_absdir / out_name)
                 cc.f_cpu = f_cpu
-                cc.build(src_abspath_strs)
+
+                try:
+                    cc.build(src_abspath_strs)
+                except AvrGccCompileError as err:
+                    print(err) 
 
     # VSCode support
     def gen_task_params(self, trg_name, trg):

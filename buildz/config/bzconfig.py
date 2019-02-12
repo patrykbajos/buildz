@@ -6,19 +6,17 @@ from buildz.config.build import Build
 from buildz.config.toolchain import Toolchain
 from buildz.config.target import Target
 
-class Config():
-    _schema_val = Schema({
-        'build': Build._schema_val,
+class BZConfig():
+    _schema = Schema({
+        'build': Build._schema,
         'modules': [str],
         'toolchains': {
-            str: Toolchain._schema_val
+            str: Toolchain._schema
         },
         'targets': {
-            str: Target._schema_val
+            str: Target._schema
         }
     })
-
-    _schema = Schema(_schema_val)
 
     def __init__(self, params):
         vd = self._schema.validate(params)
@@ -49,6 +47,6 @@ class Config():
 
         try:
             data = json.load(path.open())
-            return Config(data)
+            return BZConfig(data)
         except Exception as e:
             raise ValueError('Config.from_file(): Could not serialize or validate buildz config.', e)

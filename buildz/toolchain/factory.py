@@ -1,11 +1,14 @@
 from buildz.toolchain.avrgcc import AvrGccToolchain
 from buildz.toolchain.gcc import GccToolchain
 
+__factoryroute = {
+    'GccToolchain': GccToolchain,
+    'AvrGccToolchain': AvrGccToolchain
+}
+
 def factory_toolchain(tch):
-    if tch.type == 'GccToolchain':
-        return GccToolchain(tch)
-    if tch.type == 'AvrGccToolchain':
-        return AvrGccToolchain(tch)
-    
-    raise ValueError('Unknown toolchain type {}.'.format(tch.type))
+    try:
+        return __factoryroute[tch.type](tch)
+    except:
+        raise ValueError('Unknown toolchain type {}.'.format(tch.type))
     

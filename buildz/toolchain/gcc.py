@@ -5,32 +5,45 @@ import subprocess
 from copy import deepcopy
 from pathlib import Path
 
-from schema import Optional, Schema, SchemaError
+from schema import Optional, Schema, SchemaError, Or
 
 from buildz.toolchain.generic import GenericToolchain
-from buildz.utils import (find_re_it_in_list, get_buildz_mod, get_cmd_matches,
-                          merge, merge_envs, get_abs_mod_path, resolve_rel_paths_list)
+from buildz.utils import find_re_it_in_list, get_cmd_matches, merge, merge_envs, resolve_rel_paths_list
 
 
 class GccToolchain(GenericToolchain):
-    _conf_sch_val = deepcopy(GenericToolchain._conf_sch_val)
-    _env_sch_val = deepcopy(GenericToolchain._env_sch_val)
+    _confsch = Schema(merge(GenericToolchain._confsch._schema, {
+        'gcc_path': str,
+        'ar_path': str,
+        'ld_path': str
+    }))
 
-    _conf_sch_val.update({
-        'gcc_path': str
-    })
-    _env_sch_val.update({
+    _envsch = Schema(merge(GenericToolchain._envsch._schema, {
         Optional('compile_flags'): [str],
-        Optional('link_flags'): [str],
+        Optional('optimization'): Or(0, 1, 2, 3, 's'),
         Optional('includes'): [str],
-        Optional('defines'): [str]
-    })
+        Optional('defines'): [str],
 
-    def __init__(self, conf, env):
-        super().__init__(conf, env)
+        Optional('link_flags'): [str],
+        Optional('link_dirs'): [str],
+        Optional('link'): [str]
+    }))
+
+    __execext = {
+        'Windows': '.exe',
+        'Linux': ''
+    }
+
+    __sharedext = {
+        'Windows': '.dll',
+        'Linux': '.so'
+    }
+
+    def __init__(self, toolchain_setup):
+        super().__init__(toolchain_setup)
     
-    # gcc -xc -E -v /dev/null
-    def get_includes(self):
+    def default_includes(self):
+        # gcc -xc -E -v /dev/null
         args = [self.conf['gcc_path'], '-xc', '-E', '-v', os.devnull]
         args.extend(self.env.get('flags', []))
 
@@ -54,11 +67,10 @@ class GccToolchain(GenericToolchain):
 
         return lines[start_it+1 : end_it]
 
-    # gcc -dM -E - $flags 0</dev/null 
-    # avr-gcc -mmcu= -DF_CPU= -dM -E - $flags 0</dev/null
-    def get_defines(self, env):
+    def defines(self, uf_env):
+        # gcc -dM -E - $flags 0</dev/null 
         def_regex = r'^ *#define +(.+?) +(.+?) *$'
-        temp_env = merge(self.env, env)
+        temp_env = merge(self.env, uf_env)
 
         args = [self.conf['gcc_path'], '-dM', '-E', '-']
         args.extend(temp_env.get('flags', []))
@@ -70,112 +82,171 @@ class GccToolchain(GenericToolchain):
         # matches is tuple of (defname:str, defvalue:str)
         return matches
 
-    def is_valid(self):
-        env_sch = Schema(self._env_sch_val)
-        conf_sch = Schema(self._conf_sch_val)
+    def _unifiedflags_env(self, env):
+        incls = env.get('includes', [])
+        defs = env.get('defines', [])
+        opt = env.get('optimization', 3)
 
-        return env_sch.is_valid(self.env) and conf_sch.is_valid(self.conf)
-
-    # TODO extract submethods
-    def build_mod(self, build_type, mod_name, tch_name, tch, trg_name, trg_env):
-        try:
-            mod = get_buildz_mod(mod_name)
-        except FileNotFoundError:
-            print('GccToolchain.build_mod(): Not found module.')
-            return
-        except:
-            print("GccToolchain.build_mod(): Unexpeced error getting build module.")
-            return
-
-        mod_absdir = get_abs_mod_path(mod_name).parent
-        mod_envs = mod.get('env', {})
-        mod_env = mod_envs.get(tch_name, {})
-
-        tch_incls_temp = self.env.get('includes', [])
-        trg_incls_temp = trg_env.get('includes', [])
-        mod_incls_temp = mod_env.get('includes', [])
-
-        self.env['includes'] = resolve_rel_paths_list(tch_incls_temp, os.getcwd())
-        trg_env['includes'] = resolve_rel_paths_list(trg_incls_temp, os.getcwd())
-        mod_env['includes'] = resolve_rel_paths_list(mod_incls_temp, mod_absdir)
-
-        env = merge_envs(self.env, mod_env, trg_env, self._env_sch_val)  
-        env_defs = env.get('defines', [])
-        env_incls = env.get('includes', [])
-
-        compile_flags = env.get('compile_flags', [])
-        link_flags = env.get('link_flags', [])
-        incls = ['-I'+x for x in env_incls]
-
-        out_name_params = {
-            'build_type': build_type,
-            'module_name': mod_name,
-            'target_name': trg_name,
-            'target_toolchain': tch_name,
-            'env': deepcopy(env)
+        return {
+            'compile_flags': ['-O'+opt] + ['-D' + d for d in defs] + ['-I' + i for i in incls]
         }
 
-        out_absdir = Path(tch['output_dir'].format(**out_name_params)).resolve()
-        out_name = tch['output_pattern'].format(**out_name_params)
-        defs = ['-D'+d.format(**out_name_params) for d in env_defs]
+    def build_mod(self, config, module, target):
+        mod_env = module.envs.get(target.toolchain, {})
 
-        # compiling
-        obj_abspaths = []
-        mod_absdir = get_abs_mod_path(mod_name).parent
-        os.makedirs(str(out_absdir), exist_ok=True)
-        gcc_pathstr = self.conf['gcc_path']
+        name_params = {
+            'build_type': config.build.type,
+            'module_name': module.name,
+            'target_name': target.name,
+            'target_toolchain': target.toolchain
+        }
 
-        for f_pathstr in mod['files']:
-            with Path(f_pathstr) as f_path:
-                if f_path.is_absolute():
-                    continue
+        norm_tchenv = self._normalize_env(self.env, os.getcwd(), name_params)
+        norm_modenv = self._normalize_env(mod_env, module.absdir, name_params)
+        norm_trgenv = self._normalize_env(target.env, os.getcwd(), name_params)
 
-                obj_abspath = out_absdir / 'obj' / f_path.with_suffix('.o')
-                obj_abspaths.append(obj_abspath)
-                in_abspath = mod_absdir / f_pathstr
-
-                comp_args = [ gcc_pathstr, '-c', '-o', str(obj_abspath)]
-                comp_args.extend(compile_flags)
-                comp_args.extend(defs)
-                comp_args.extend(incls)
-                comp_args.append(str(in_abspath))
-
-                comp_proc = subprocess.run(comp_args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-
-                if comp_proc.returncode == 0:
-                    print("GccToolchain.build_mod(): GCC compiled {} with no errors.".format(f_pathstr))
-                else:
-                    print('GccToolchain.build_mod(): GCC returned with errors for file {}:\n'.format(f_pathstr), comp_proc.stdout, '\n')
-
-        # linking
-        if(platform.system() == 'Windows'):
-            bin_ext = '.exe'
-        else:
-            bin_ext = ''
+        env = merge_envs(norm_tchenv, norm_modenv, norm_trgenv, self._envsch)
+        uf_env = self._unifiedflags_env(env)
+        env = merge(env, uf_env)
         
-        for obj_abspath in obj_abspaths:
-            os.makedirs(str(obj_abspath.parent), exist_ok=True)
+        abs_modfiles = resolve_rel_paths_list(module.files, module.absdir)
 
-        bin_abspath = out_absdir / str(out_name+bin_ext)
+        out_absdir = Path(self.setup.output_dir.format(**name_params)).resolve()
+        obj_absdir = (out_absdir / 'obj')
 
-        link_args = [gcc_pathstr]
-        link_args.extend(link_flags)
-        link_args.extend(['-o', str(bin_abspath)])
-        link_args.extend(obj_abspaths)
-        link_proc = subprocess.run(link_args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        objects = self._build_objects(env, obj_absdir, abs_modfiles) 
+        
+        out_name = self.setup.output_pattern.format(**name_params)
 
-        if link_proc.returncode == 0:
-            print("GccToolchain.build_mod(): GCC linking returned with no errors.")
+        if module.packaging == 'executable':
+            result = self._link(env, objects, False, out_absdir, out_name)
+        if module.packaging == 'shared':
+            result = self._link(env, objects, True, out_absdir, out_name)
+        if module.packaging == 'static':
+            result = self._ar_objects(env, objects, out_absdir, out_name)
+        
+        return (result == 0)
+
+    def _normalize_env(self, env, path, name_params):
+        tenv = deepcopy(env)
+
+        for key, val in tenv.items():
+            if isinstance(val, list):
+                temp = []
+                for elem in val:
+                    if isinstance(elem, str):
+                        temp.append(elem.format(**name_params))
+                    else:
+                        temp.append(elem)
+                tenv[key] = temp
+            if isinstance(val, str):
+                tenv[key] = val.format(**name_params)
+
+        tenv['includes'] = resolve_rel_paths_list(env['includes'], path)
+        tenv['link_dirs'] = resolve_rel_paths_list(env['link_dirs'], path)
+
+        return tenv
+
+    def _build_objects(self, uf_env, objs_absdir, sources):
+        gcc = self.conf['gcc_path']
+        
+        flags = uf_env.get('compile_flags', [])
+
+        objs_absdir = Path(objs_absdir)
+        os.makedirs(str(objs_absdir), exist_ok=True)
+        obj_abspaths = []
+
+        # TODO: Time check
+
+        for fp_str in sources:
+            fp = Path(fp_str)
+            if fp.is_absolute():
+                continue
+
+            obj_abspath = objs_absdir / fp.with_suffix('.o')
+            os.makedirs(obj_abspath.parent, exist_ok=True)
+
+            args = [gcc, '-c', '-o', str(obj_abspath)]
+            args.extend(flags)
+            args.append(fp_str)
+
+            proc = subprocess.run(args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+            if proc.returncode == 0:
+                print("GccToolchain.build_mod(): GCC compiled {} without errors.".format(fp))
+            else:
+                print('GccToolchain.build_mod(): GCC returned with errors for file {}:\n'.format(fp), proc.stdout)
+                break
+
+            obj_abspaths.append(obj_abspath)
+        return obj_abspaths
+
+    def _link(self, env, obj_abspaths, shared, exe_absdir, exe_name):
+        if shared:
+            ext = self.__sharedext[platform.system()]
+            exe_name = ('lib' + exe_name)
         else:
-            print('GccToolchain.build_mod(): GCC returned with errors for file {}:\n'.format(f_pathstr), link_proc.stdout, '\n')
-            
-        return (link_proc.returncode == 0)
+            ext = self.__execext[platform.system()]
+    
+        exe_absdir = Path(exe_absdir)
+
+        if shared:
+            exe_abspath = exe_absdir / (exe_name + ext)
+        else:
+            exe_abspath = exe_absdir / (exe_name + ext)
+
+        ld = self.conf['ld_path']
+        link_dirs = ['-L ' + l for l in self.env.get('link_dirs', [])]
+        link = ['-l ' + l for l in self.env.get('link', [])]
+        link_flags = self.env.get('link_flags', [])
+
+        args = [ld]
+        
+        if shared:
+            if platform.system() == 'Windows':
+                args.append('--dll --output-def {}'.format(exe_absdir / (exe_name + '.def')))
+            if platform.system() == 'Linux':
+                args.append('-shared -soname={}'.format(exe_name + ext))
+
+        args.extend(link_dirs)
+        args.extend(link_flags)
+        args.extend(link)
+        args.extend(['-o', str(exe_abspath)])
+        args.extend(obj_abspaths)
+
+        proc = subprocess.run(args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+        if proc.returncode == 0:
+            print("GccToolchain._link(): LD linking returned with no errors.")
+        else:
+            print('GccToolchain._link(): LD returned with errors for file {}:\n'.format(exe_name+ext), proc.stdout, '\n')
+
+        return proc.returncode
+
+    def _ar_objects(self, env, obj_abspaths, a_absdir, a_name):
+        a_name = ('lib' + a_name + '.a')
+        a_abspath = Path(a_absdir) / a_name
+
+        ar = self.conf['ar_path']
+
+        args = [ar]
+        args.extend(['-r', str(a_abspath)])
+        args.extend(obj_abspaths)
+
+        proc = subprocess.run(args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+        if proc.returncode == 0:
+            print("GccToolchain.__ar_objects(): AR returned with no errors.")
+        else:
+            print('GccToolchain.__ar_objects(): AR returned with errors for file {}:\n'.format(a_name), proc.stdout, '\n')
+
+        return proc.returncode
 
     # VSCode support
-    def gen_tasks(self, trg_name, trg):
+    def gen_tasks(self, target):
         return [
-            (trg_name)
+            (target.name)
         ]
     
-    def gen_config(self, trg_name):
+    def gen_config(self, target):
         return {}

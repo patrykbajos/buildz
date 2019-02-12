@@ -3,7 +3,7 @@ from schema import Schema, Optional
 import json
 
 class Module():
-    _schema_val = {
+    _schema = Schema({
         "files": [],
         "envs": {
             Optional(str): {
@@ -11,9 +11,7 @@ class Module():
             }
         },
         "packaging": str
-    }
-
-    _schema = Schema(_schema_val)
+    })
 
     def __init__(self, name, params):
         vd = self._schema.validate(params)

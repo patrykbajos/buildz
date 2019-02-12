@@ -1,7 +1,7 @@
 from schema import Schema, Optional
 
 class Toolchain():
-    _schema_val = {
+    _schema = Schema({
         'type': str,
         'output_dir': str,
         'output_pattern': str,
@@ -11,9 +11,7 @@ class Toolchain():
         'env': {
             Optional(str): object
         }
-    }
-
-    _schema = Schema(_schema_val)
+    })
 
     def __init__(self, name, params):
         vd = self._schema.validate(params)

@@ -2,15 +2,13 @@
 from schema import Schema, Or, Optional
 
 class Target():
-    _schema_val = {
+    _schema = Schema({
         'modules': Or('all', []),
         'toolchain': str,
         'env': {
             Optional(str): object
         }
-    }
-
-    _schema = Schema(_schema_val)
+    })
 
     def __init__(self, name, params):
         vd = self._schema.validate(params)

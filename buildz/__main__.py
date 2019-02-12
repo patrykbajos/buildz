@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import sys
 
 from buildz.frontend.buildzself import BuildzSelfFrontend

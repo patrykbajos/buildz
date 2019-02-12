@@ -1,10 +1,9 @@
 import json
 import platform
 
-from buildz.toolchain.factory import factory_named_toolchain
+from buildz.toolchain.factory import factory_toolchain
 from buildz.utils import (get_buildz_conf, get_dicts_with_value,
                           append_unique_dict_to_list)
-
 
 class VSCodeFrontend():
     __vsc_plat_dict = {
@@ -63,7 +62,7 @@ class VSCodeFrontend():
 
         sel_tasks = []
         for trg_name, trg in trgs.items():
-            tch_handle = factory_named_toolchain(trg['toolchain'], tchs)
+            tch_handle = factory_toolchain(trg['toolchain'], tchs)
             sel_trg_params = tch_handle.gen_task_params(trg_name, trg)
 
             for params_tuple in sel_trg_params:
@@ -114,13 +113,13 @@ class VSCodeFrontend():
         tch_name = trg_conf['toolchain']
         tchs = bz_conf['toolchains']
 
-        tch_handler = factory_named_toolchain(tch_name, tchs)
+        tch_handler = factory_toolchain(tch_name, tchs)
 
         # TODO WARNING 
         env = {}
 
-        defines = tch_handler.get_defines(env)
-        includes = tch_handler.get_includes(env)
+        defines = tch_handler.defines(env)
+        includes = tch_handler.default_includes(env)
 
         
         # TODO target selection

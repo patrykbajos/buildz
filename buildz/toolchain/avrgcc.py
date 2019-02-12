@@ -8,110 +8,74 @@ from pyavrutils import AvrGcc, AvrGccCompileError
 from schema import Optional, Schema, Or
 
 from buildz.toolchain.gcc import GccToolchain
-from buildz.utils import get_buildz_mod, merge_envs, get_abs_mod_path, resolve_rel_paths_list
+from buildz.utils import merge, merge_envs, resolve_rel_paths_list
 
 
 class AvrGccToolchain(GccToolchain):
-    _env_sch_val = deepcopy(GccToolchain._env_sch_val)
-    _env_sch_val.update({
+    _envsch = Schema(merge(GccToolchain._envsch._schema, {
         Optional('mcu'): str,
         Optional('fcpu'): [int],
-        Optional('optimization'): Or(0, 1, 2, 3, 's')
-    })
+    }))
 
-    def __init__(self,  conf, env):
-        super().__init__(conf, env)
+    def __init__(self, toolchain_setup):
+        super().__init__(toolchain_setup)
 
-    def make_env(self, compile_flags, mcu, fcpu):
-        mcu_flag = '-mmcu={}'.format(mcu)
+    def _unifiedflags_env(self, env):
+        mcu = env.get('mcu')
+        fcpu = env.get('fcpu', 1000000)
 
-        return {
-            'compile_flags': compile_flags + mcu_flag,
-            'defines': 'F_CPU={}'.format(fcpu)
+        return merge(super()._unifiedflags_env, {
+            'compile_flags': ['-mmcu={}'.format(mcu), '-DF_CPU={}'.format(fcpu)]
+        })
+
+    def build_mod(self, config, module, target):
+        mod_env = module.envs.get(target.toolchain, {})
+
+        build_params = {
+            'build_type': config.build.type,
+            'module_name': module.name,
+            'target_name': target.name,
+            'target_toolchain': target.toolchain
         }
 
-    def get_defines(self, flags, mcu, fcpu):
-        return GccToolchain.get_defines(self, self.make_env(flags, mcu, fcpu))
+        norm_tchenv = self._normalize_env(self.env, os.getcwd(), build_params)
+        norm_modenv = self._normalize_env(mod_env, module.absdir, build_params)
+        norm_trgenv = self._normalize_env(target.env, os.getcwd(), build_params)
 
-    def build_mod(self, build_type, mod_name, tch_name, tch, trg_name, trg_env):
-        try:
-            mod = get_buildz_mod(mod_name)
-        except FileNotFoundError:
-            print('AvrGccToolchain.build_mod(): Not found module {}.'.format(mod_name))
-            return
-        except:
-            print("AvrGccToolchain.build_mod(): Unexpeced error getting build module {}.".format(mod_name))
-            return
+        env = merge_envs(norm_tchenv, norm_modenv, norm_trgenv, self._envsch)
+        uf_env = self._unifiedflags_env(env)
+        env = merge(env, uf_env)
 
-        mod_absdir = get_abs_mod_path(mod_name).parent
-        mod_envs = mod.get('env', {})
-        mod_env = mod_envs.get(tch_name, {})
+        abs_modfiles = resolve_rel_paths_list(module.files, module.absdir)
 
-        tch_incls_temp = self.env.get('includes', [])
-        trg_incls_temp = trg_env.get('includes', [])
-        mod_incls_temp = mod_env.get('includes', [])
+        for fcpu in env['fcpu']:
+            outname_params = {
+                'mcu': env['mcu'],
+                'fcpu': fcpu
+            }
+            outname_params.update(build_params)
 
-        self.env['includes'] = resolve_rel_paths_list(tch_incls_temp, os.getcwd())
-        trg_env['includes'] = resolve_rel_paths_list(trg_incls_temp, os.getcwd())
-        mod_env['includes'] = resolve_rel_paths_list(mod_incls_temp, mod_absdir)
+            out_absdir = Path(self.__setup.output_dir.format(**outname_params)).resolve()
+            obj_absdir = (out_absdir / 'obj')
 
-        env = merge_envs(self.env, mod_env, trg_env, self._env_sch_val)  
+            objects = self._build_objects(env, obj_absdir, abs_modfiles) 
+            
+            out_name = self.__setup.output_pattern.format(**outname_params)
 
-        env_defs = env.get('defines', [])
-        env_incls = env.get('includes', [])
-        env_mcu =  env.get('mcu')
-        env_fcpu = env.get('fcpu')
-        env_cflags = env.get('compile_flags', [])
-        env_opt = env.get('optimization')
-
-
-        cc.cc = gcc_pathstr
-        cc.includes = env_incls
-        if env_opt:
-            cc.optimization = env_opt
-        cc.options_extra.extend(env_cflags)
-        cc.mcu = env_mcu
-
-        out_name_params = {
-            'build_type': build_type,
-            'module_name': mod_name,
-            'target_name': trg_name,
-            'target_toolchain': tch_name,
-            'env': deepcopy(env)
-        }
-
-        out_absdir = Path(tch['output_dir'].format(**out_name_params)).resolve()
-        out_name_pattern = tch['output_pattern']
-        os.makedirs(str(out_absdir), exist_ok=True)
-        cc.defines = [d.format(**out_name_params) for d in env_defs]
-        gcc_pathstr = self.conf['gcc_path']
-
-
-        for f_cpu in env_fcpu:
-                out_name_params['env']['fcpu'] = f_cpu
-                out_name = out_name_pattern.format(**out_name_params)
-
-                src_abspath_strs = []
-                for f_pathstr in mod['files']:
-                    f_path = Path(f_pathstr)
-                    if f_path.is_absolute():
-                        continue
-
-                    src_abspath_strs.append(str(mod_absdir / f_pathstr))
-
-                cc.output = str(out_absdir / out_name)
-                cc.f_cpu = f_cpu
-
-                try:
-                    cc.build(src_abspath_strs)
-                except AvrGccCompileError as err:
-                    print(err) 
+            if module.packaging == 'executable':
+                result = self._link(env, objects, False, out_absdir, out_name)
+            if module.packaging == 'shared':
+                result = self._link(env, objects, True, out_absdir, out_name)
+            if module.packaging == 'static':
+                result = self._ar_objects(env, objects, out_absdir, out_name)
+                
+            return (result == 0)
 
     # VSCode support
-    def gen_task_params(self, trg_name, trg):
-        fcpus = trg['env'].get('fcpu', [])
+    def gen_task_params(self, trg):
+        fcpus = trg.env.get('fcpu', [])
 
-        return [(trg_name, str(fcpu)) for fcpu in fcpus]
+        return [(trg.name, str(fcpu)) for fcpu in fcpus]
     
     def gen_config(self, trg_name, fcpu):
         return {}

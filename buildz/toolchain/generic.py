@@ -5,8 +5,8 @@ class GenericToolchain():
     _envsch = Schema({})
     _confsch = Schema({})
 
-    def __init__(self, tchsetup):
-        self.__setup = tchsetup
+    def __init__(self, toolchain_setup):
+        self.__setup = toolchain_setup
         self.__valid = self.__validate_setup()
 
     def __validate_setup(self):
@@ -24,7 +24,7 @@ class GenericToolchain():
 
         return True
 
-    def build_mod(self, config, toolchain, module, target):
+    def build_mod(self, config, module, target):
         pass
 
     def is_valid(self):

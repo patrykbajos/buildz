@@ -9,7 +9,7 @@ class BuildzSelfFrontend():
     def build(self):
         bz = BZConfig.from_file()
 
-        for trg in bz.targets:
+        for trg in bz.targets.values():
             print('Processing target {}.'.format(trg.name))
 
             # trg.modules can be mod names list or string 'all'
@@ -18,7 +18,7 @@ class BuildzSelfFrontend():
             else:
                 modules = trg.modules
 
-            tch = bz.toolchains['trg.toolchain']
+            tch = bz.toolchains[trg.toolchain]
             tch_handler = factory_toolchain(tch)
 
             for mod_name in modules:

@@ -4,8 +4,8 @@ import json
 
 class Module():
     _schema = Schema({
-        "files": [],
-        "envs": {
+        "files": [str],
+        Optional("envs", default={}): {
             Optional(str): {
                 Optional(str): object
             }
@@ -43,8 +43,12 @@ class Module():
 
         try:
             data = json.load(path.open())
-            return Module(mod_name, data)
         except:
-            raise ValueError('Module.from_file(): Could not serialize or validate module {}. Expected path: {}'.format(mod_name, path))
+            raise ValueError('Module.from_file(): Could not serialize module {}. Expected path: {}'.format(mod_name, path))
+
+        try:
+            return Module(mod_name, data)
+        except Exception as e:
+            raise ValueError('Module.from_file(): Could not validate module {}.\n{}'.format(mod_name, e))
 
 

@@ -2,8 +2,8 @@ import json
 import platform
 
 from buildz.toolchain.factory import factory_toolchain
-from buildz.utils import (get_buildz_conf, get_dicts_with_value,
-                          append_unique_dict_to_list)
+from buildz.utils import get_dicts_with_value, append_unique_dict_to_list
+from buildz.config.bzconfig import BZConfig
 
 class VSCodeFrontend():
     __vsc_plat_dict = {
@@ -38,13 +38,13 @@ class VSCodeFrontend():
 
     def update_tasks(self):
         try:
-            bz_conf = get_buildz_conf()
+            bz_conf = BZConfig.from_file()
         except Exception as e:
             print('VSCodeFrontend.update_tasks(): Error getting buildz config.\n', e)
             return
 
-        trgs = bz_conf['targets']
-        tchs = bz_conf['toolchains']
+        trgs = bz_conf.targets
+        tchs = bz_conf.toolchains
 
         build_task = {
             'label': 'BuildZ Build',
@@ -61,9 +61,11 @@ class VSCodeFrontend():
         }
 
         sel_tasks = []
-        for trg_name, trg in trgs.items():
-            tch_handle = factory_toolchain(trg['toolchain'], tchs)
-            sel_trg_params = tch_handle.gen_task_params(trg_name, trg)
+        for trg in trgs:
+            tch = tchs[trg.toolchain]
+            tch_handle = factory_toolchain(tch)
+
+            sel_trg_params = tch_handle.gen_task_params(trg.name, trg)
 
             for params_tuple in sel_trg_params:
                 sel_params_str = ' '.join(params_tuple)
@@ -105,25 +107,22 @@ class VSCodeFrontend():
 
     def select_target(self, trg_name, *trg_args):
         cpp_prop = self.__prop_dict
-        bz_conf = get_buildz_conf()
+        bz_conf = BZConfig.from_file()
 
         confs = cpp_prop['configurations']
 
-        trg_conf = bz_conf['targets'][trg_name]
-        tch_name = trg_conf['toolchain']
-        tchs = bz_conf['toolchains']
+        trg = bz_conf.targets[trg_name]
+        tch = bz_conf.toolchains[trg.toolchain]
 
-        tch_handler = factory_toolchain(tch_name, tchs)
+        tch_handler = factory_toolchain(tch)
 
         # TODO WARNING 
         env = {}
 
         defines = tch_handler.defines(env)
         includes = tch_handler.default_includes(env)
-
         
         # TODO target selection
-
 
         return
 

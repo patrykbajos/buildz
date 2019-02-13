@@ -22,10 +22,9 @@ class AvrGccToolchain(GccToolchain):
 
     def _unifiedflags_env(self, env):
         mcu = env.get('mcu')
-        fcpu = env.get('fcpu', 1000000)
 
-        return merge(super()._unifiedflags_env, {
-            'compile_flags': ['-mmcu={}'.format(mcu), '-DF_CPU={}'.format(fcpu)]
+        return merge(super()._unifiedflags_env(env), {
+            'compile_flags': ['-mmcu=' + mcu, '-DF_CPU={fcpu}']
         })
 
     def build_mod(self, config, module, target):
@@ -46,28 +45,37 @@ class AvrGccToolchain(GccToolchain):
         uf_env = self._unifiedflags_env(env)
         env = merge(env, uf_env)
 
-        abs_modfiles = resolve_rel_paths_list(module.files, module.absdir)
+        mcu = env['mcu']
 
         for fcpu in env['fcpu']:
+            print('[AVRGCC] Building module for {} with {} Hz clock.'.format(mcu, fcpu))
+
+            tenv = deepcopy(env)
+
             outname_params = {
-                'mcu': env['mcu'],
+                'mcu': mcu,
                 'fcpu': fcpu
             }
             outname_params.update(build_params)
 
-            out_absdir = Path(self.__setup.output_dir.format(**outname_params)).resolve()
-            obj_absdir = (out_absdir / 'obj')
+            out_absdir = Path(self.setup.output_dir.format(**outname_params)).resolve()
+            obj_absdir = (out_absdir / 'obj_{}_{}'.format(mcu, fcpu))
 
-            objects = self._build_objects(env, obj_absdir, abs_modfiles) 
+            tcflags = []
+            for flag in env['compile_flags']:
+                tcflags.append(flag.format(fcpu=fcpu))
+            tenv['compile_flags'] = tcflags
+
+            objects = self._build_objects(tenv, obj_absdir, module) 
             
-            out_name = self.__setup.output_pattern.format(**outname_params)
+            out_name = self.setup.output_pattern.format(**outname_params)
 
             if module.packaging == 'executable':
-                result = self._link(env, objects, False, out_absdir, out_name)
+                result = self._link(tenv, objects, False, out_absdir, out_name)
             if module.packaging == 'shared':
-                result = self._link(env, objects, True, out_absdir, out_name)
+                result = self._link(tenv, objects, True, out_absdir, out_name)
             if module.packaging == 'static':
-                result = self._ar_objects(env, objects, out_absdir, out_name)
+                result = self._ar_objects(tenv, objects, out_absdir, out_name)
                 
             return (result == 0)
 

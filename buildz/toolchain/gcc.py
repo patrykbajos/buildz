@@ -24,6 +24,9 @@ class GccToolchain(GenericToolchain):
         Optional('includes'): [str],
         Optional('defines'): [str],
 
+        Optional('build_type'): str,
+        Optional('debug_level'): Or(0, 1, None, 3),
+
         Optional('link_flags'): [str],
         Optional('link_dirs'): [str],
         Optional('link'): [str]
@@ -87,8 +90,22 @@ class GccToolchain(GenericToolchain):
         defs = env.get('defines', [])
         opt = env.get('optimization', 3)
 
+        build_type = env.get('build_type', 'release')
+        debug_level = env.get('debug_level', None)
+
+        fl = []
+        if build_type == 'debug':
+            fl.append('-g' + debug_level)
+            fl.append('-D_DEBUG')
+        if build_type == 'release':
+            fl.append('-DNDEBUG')
+
+        fl.append('-O' + str(opt))
+        fl.extend(['-D' + d for d in defs])
+        fl.extend(['-I' + i for i in incls])
+
         return {
-            'compile_flags': ['-O'+opt] + ['-D' + d for d in defs] + ['-I' + i for i in incls]
+            'compile_flags': fl
         }
 
     def build_mod(self, config, module, target):
@@ -108,13 +125,11 @@ class GccToolchain(GenericToolchain):
         env = merge_envs(norm_tchenv, norm_modenv, norm_trgenv, self._envsch)
         uf_env = self._unifiedflags_env(env)
         env = merge(env, uf_env)
-        
-        abs_modfiles = resolve_rel_paths_list(module.files, module.absdir)
 
         out_absdir = Path(self.setup.output_dir.format(**name_params)).resolve()
         obj_absdir = (out_absdir / 'obj')
 
-        objects = self._build_objects(env, obj_absdir, abs_modfiles) 
+        objects = self._build_objects(env, obj_absdir, module) 
         
         out_name = self.setup.output_pattern.format(**name_params)
 
@@ -142,12 +157,12 @@ class GccToolchain(GenericToolchain):
             if isinstance(val, str):
                 tenv[key] = val.format(**name_params)
 
-        tenv['includes'] = resolve_rel_paths_list(env['includes'], path)
-        tenv['link_dirs'] = resolve_rel_paths_list(env['link_dirs'], path)
+        tenv['includes'] = resolve_rel_paths_list(env.get('includes', []), path)
+        tenv['link_dirs'] = resolve_rel_paths_list(env.get('link_dirs', []), path)
 
         return tenv
 
-    def _build_objects(self, uf_env, objs_absdir, sources):
+    def _build_objects(self, uf_env, objs_absdir, module):
         gcc = self.conf['gcc_path']
         
         flags = uf_env.get('compile_flags', [])
@@ -156,26 +171,36 @@ class GccToolchain(GenericToolchain):
         os.makedirs(str(objs_absdir), exist_ok=True)
         obj_abspaths = []
 
-        # TODO: Time check
-
-        for fp_str in sources:
+        for fp_str in module.files:
             fp = Path(fp_str)
-            if fp.is_absolute():
-                continue
 
-            obj_abspath = objs_absdir / fp.with_suffix('.o')
+            if fp.is_absolute():
+                obj_abspath = Path(objs_absdir) / (fp.stem + '.o')
+                fp_abspath = fp
+            else:
+                obj_abspath = Path(objs_absdir) / fp.with_suffix('.o')
+                fp_abspath = module.absdir / fp
+
             os.makedirs(obj_abspath.parent, exist_ok=True)
+
+            # if obj is newer than source compilation is nonsense
+            if obj_abspath.exists():
+                obj_mtime = obj_abspath.stat().st_mtime
+                src_mtime = fp_abspath.stat().st_mtime
+
+                if src_mtime < obj_mtime:
+                    continue
 
             args = [gcc, '-c', '-o', str(obj_abspath)]
             args.extend(flags)
-            args.append(fp_str)
+            args.append(fp_abspath)
 
             proc = subprocess.run(args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
             if proc.returncode == 0:
-                print("GccToolchain.build_mod(): GCC compiled {} without errors.".format(fp))
+                print("[GCC] Compiled {} without errors.".format(fp_str))
             else:
-                print('GccToolchain.build_mod(): GCC returned with errors for file {}:\n'.format(fp), proc.stdout)
+                print('[GCC] Returned with errors for file {}:\n'.format(fp_str), proc.stdout)
                 break
 
             obj_abspaths.append(obj_abspath)
@@ -217,9 +242,9 @@ class GccToolchain(GenericToolchain):
         proc = subprocess.run(args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
         if proc.returncode == 0:
-            print("GccToolchain._link(): LD linking returned with no errors.")
+            print("[LINKER] Linked {} without errors.".format(exe_name+ext))
         else:
-            print('GccToolchain._link(): LD returned with errors for file {}:\n'.format(exe_name+ext), proc.stdout, '\n')
+            print('[LINKER] Returned errors for file {}:\n'.format(exe_name+ext), proc.stdout, '\n')
 
         return proc.returncode
 
@@ -236,9 +261,9 @@ class GccToolchain(GenericToolchain):
         proc = subprocess.run(args, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
         if proc.returncode == 0:
-            print("GccToolchain.__ar_objects(): AR returned with no errors.")
+            print("[AR] Archived without errors.")
         else:
-            print('GccToolchain.__ar_objects(): AR returned with errors for file {}:\n'.format(a_name), proc.stdout, '\n')
+            print('[AR] Failed for file {}:\n'.format(a_name), proc.stdout, '\n')
 
         return proc.returncode
 

@@ -12,7 +12,7 @@ Dependent on use:
 
 ## Use
 
-# Main config
+### Main config
 The main configration file is `buildz.json`. It must be placed in project root directory.
 Structure of the config is:
 ```json
@@ -58,7 +58,7 @@ Structure of the config is:
     `env`: It is target dependent part of compiler env. It can use the same variables as `toolchain.env`. It is compiler specific.
 
 
-# Module Config file
+### Module Config file
 Must be placed in `{project-root}/{module-name}/module.json`
 ```json
 {
@@ -76,7 +76,7 @@ Must be placed in `{project-root}/{module-name}/module.json`
 
 ## Toolchains
 
-# GccToolchain
+### GccToolchain
 Conf must be dict of variables such as:
     `gcc_path`: On Linux usually it is `/usr/bin/gcc`. If you have configured OS env it can be just `gcc`.
     `ld_path`: On Linux usually it is `/usr/bin/ld`. If you have configured OS env it can be just `ld`.
@@ -96,7 +96,7 @@ Env variables are:
     `link_dirs`: Default is `[]`. It is list of strings. Strings can be absolute, root relative (if defined in `toolchain.env` or `target.env`) or module relative (if defined in `module.envs`) paths. It can use `env` parameters.
     `link`: Default is `[]`. It is list of strings. Each of string is library name which should be linked.
 
-# AvrGccToolchain
+### AvrGccToolchain
 Conf must be dict of variables such as:
     The same as for `GccToolchain`.
 Env variables are:

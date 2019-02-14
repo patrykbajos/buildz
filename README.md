@@ -79,34 +79,34 @@ Must be placed in `{project-root}/{module-name}/module.json`
 ## Toolchains
 
 ### GccToolchain
-Conf must be dict of variables such as:
-* `gcc_path`: On Linux usually it is `/usr/bin/gcc`. If you have configured OS env it can be just `gcc`.
-* `ld_path`: On Linux usually it is `/usr/bin/ld`. If you have configured OS env it can be just `ld`.
-* `ar_path`: On Linux usually it is `/usr/bin/ar`. If you have configured OS env it can be just `ar`.
+* Conf must be dict of variables such as:
+    * `gcc_path`: On Linux usually it is `/usr/bin/gcc`. If you have configured OS env it can be just `gcc`.
+    * `ld_path`: On Linux usually it is `/usr/bin/ld`. If you have configured OS env it can be just `ld`.
+    * `ar_path`: On Linux usually it is `/usr/bin/ar`. If you have configured OS env it can be just `ar`.
 
-Env variables are:
-*  `optimization`: Default is `3`. It can be `0`, `1`,`2`,`3` or `"s"`.
-* `compiler_flags`: Default is `[]`. It it list of strings, each string per flag.
+* Env variables are:
+    *  `optimization`: Default is `3`. It can be `0`, `1`,`2`,`3` or `"s"`.
+    * `compiler_flags`: Default is `[]`. It it list of strings, each string per flag.
 
-* `includes`: Default is `[]`. It is list of strings. Strings can be absolute, root relative (if defined in `toolchain.env` or `target.env`) or module relative (if defined in `module.envs`) paths. It can use `env` parameters.
-* `defines`: Default is `[]`. It is list of strings. Strings can be absolute, root relative (if defined in `toolchain.env` or `target.env`) or module relative (if defined in `module.envs`) paths. It can use `env` parameters.
+    * `includes`: Default is `[]`. It is list of strings. Strings can be absolute, root relative (if defined in `toolchain.env` or `target.env`) or module relative (if defined in `module.envs`) paths. It can use `env` parameters.
+    * `defines`: Default is `[]`. It is list of strings. Strings can be absolute, root relative (if defined in `toolchain.env` or `target.env`) or module relative (if defined in `module.envs`) paths. It can use `env` parameters.
 
-* `build_type`: Default is `release`. It can be `release` or `debug`.
-* `debug_level`: Default is `None`. It can be `0`, `1`, `None`, `3`.
+    * `build_type`: Default is `release`. It can be `release` or `debug`.
+    * `debug_level`: Default is `None`. It can be `0`, `1`, `None`, `3`.
 
-* `link_flags`: Default is `[]`. It it list of strings, each string per flag.
-* `link_dirs`: Default is `[]`. It is list of strings. Strings can be absolute, root relative (if defined in `toolchain.env` or `target.env`) or module relative (if defined in `module.envs`) paths. It can use `env` parameters.
-* `link`: Default is `[]`. It is list of strings. Each of string is library name which should be linked.
+    * `link_flags`: Default is `[]`. It it list of strings, each string per flag.
+    * `link_dirs`: Default is `[]`. It is list of strings. Strings can be absolute, root relative (if defined in `toolchain.env` or `target.env`) or module relative (if defined in `module.envs`) paths. It can use `env` parameters.
+    * `link`: Default is `[]`. It is list of strings. Each of string is library name which should be linked.
 
 ### AvrGccToolchain
-Conf must be dict of variables such as:
-* The same as for `GccToolchain`.
-Env variables are:
-* The same as for `GccToolchain`.
-Additionally they are:
-* `mcu`: It is string containing  mcu name.
-* `fcpu`: Default is `[1000000]`. It is list of integers. It is use for target compilation.
+* Conf must be dict of variables such as:
+    * The same as for `GccToolchain`.
+* Env variables are:
+    * The same as for `GccToolchain`.
+* Additionally they are:
+    * `mcu`: It is string containing  mcu name.
+    * `fcpu`: Default is `[1000000]`. It is list of integers. It is use for target compilation.
 
-Additional variables are available for `output_dir` and `output_pattern`. They are:
-* `mcu`: string
-* `fcpu`: integer
+* Additional variables are available for `output_dir` and `output_pattern`. They are:
+    * `mcu`: string
+    * `fcpu`: integer

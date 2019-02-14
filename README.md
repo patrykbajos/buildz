@@ -103,7 +103,7 @@ Conf must be dict of variables such as:
 * The same as for `GccToolchain`.
 Env variables are:
 * The same as for `GccToolchain`.
-* Additionally they are:
+Additionally they are:
 * `mcu`: It is string containing  mcu name.
 * `fcpu`: Default is `[1000000]`. It is list of integers. It is use for target compilation.
 
